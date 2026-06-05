@@ -1,6 +1,4 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
-from typing import List
 
 
 class Settings(BaseSettings):
@@ -18,15 +16,12 @@ class Settings(BaseSettings):
     TIKTOK_PIXEL_ID: str = ""
     SNAP_ACCESS_TOKEN: str = ""
     SNAP_PIXEL_ID: str = ""
-    ALLOWED_ORIGINS: List[str] = ["https://lamabeauty.shop", "http://localhost:3000"]
+    # Comma-separated origins, e.g. "https://lamabeauty.shop,http://localhost:3000"
+    ALLOWED_ORIGINS: str = "https://lamabeauty.shop,http://localhost:3000"
     TEST_PHONE: str = "0550000000"
 
-    @field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def parse_allowed_origins(cls, v):
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+    def get_allowed_origins(self) -> list[str]:
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
 
 settings = Settings()
