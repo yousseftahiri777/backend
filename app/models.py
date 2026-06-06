@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Boolean, DateTime, JSON
+from sqlalchemy import Column, String, Float, Boolean, DateTime, JSON, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
 
@@ -26,3 +26,16 @@ class Order(Base):
     source = Column(String, nullable=False, default="website")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TrackingEvent(Base):
+    __tablename__ = "tracking_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_name = Column(String, nullable=False, index=True)
+    event_id = Column(String, nullable=False, unique=True, index=True)
+    event_time = Column(Integer, nullable=False)
+    user_data = Column(JSON, nullable=False, default=dict)
+    custom_data = Column(JSON, nullable=False, default=dict)
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
