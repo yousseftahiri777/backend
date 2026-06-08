@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Boolean, DateTime, JSON, Integer
+from sqlalchemy import Column, String, Float, Boolean, DateTime, JSON, Integer, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from app.database import Base
 
 
@@ -26,6 +27,21 @@ class Order(Base):
     source = Column(String, nullable=False, default="website")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    order_items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(String, nullable=False)
+    name_ar = Column(String, nullable=False)
+    qty = Column(Integer, nullable=False)
+    price = Column(Float, nullable=False)
+
+    order = relationship("Order", back_populates="order_items")
 
 
 class TrackingEvent(Base):

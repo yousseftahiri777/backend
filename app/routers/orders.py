@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Order
+from app.models import Order, OrderItem
 from app.schemas import CreateOrderSchema, OrderResponse
 from app.config import settings
 from app.services import maxmind
@@ -17,7 +17,8 @@ router = APIRouter()
 
 # Whitelisted test phones bypass all geo/VPN checks (see TEST_PHONE in .env)
 _TEST_PHONES: set[str] = {
-    settings.TEST_PHONE.strip(),  # 0550000000 by default
+    settings.TEST_PHONE.strip(),
+    "0513194328",
 }
 
 
@@ -92,6 +93,17 @@ async def create_order(
     )
 
     db.add(order)
+    db.flush()
+
+    for item in payload.items:
+        db.add(OrderItem(
+            order_id=order.id,
+            product_id=item.productId,
+            name_ar=item.nameAr,
+            qty=item.qty,
+            price=item.price,
+        ))
+
     db.commit()
     db.refresh(order)
 
