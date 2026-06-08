@@ -25,3 +25,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# SQLAlchemy 2.0 dropped support for "postgres://" scheme
+if settings.DATABASE_URL.startswith("postgres://"):
+    settings.DATABASE_URL = settings.DATABASE_URL.replace("postgres://", "postgresql://", 1)
