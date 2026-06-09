@@ -74,8 +74,8 @@ async def create_order(
             "is_allowed": True,
         }
     else:
-        # Use Cloudflare country header first (free, reliable, no API calls)
-        cf_country = request.headers.get("CF-IPCountry", "").upper().strip()
+        # Use Cloudflare country header (forwarded by Next.js proxy as X-CF-IPCountry)
+        cf_country = (request.headers.get("X-CF-IPCountry") or request.headers.get("CF-IPCountry", "")).upper().strip()
         if cf_country and cf_country not in ("", "XX", "T1"):
             is_allowed = cf_country == "SA"
             geo = {
