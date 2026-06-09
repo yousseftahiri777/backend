@@ -23,6 +23,10 @@ _TEST_PHONES: set[str] = {
 
 
 def get_client_ip(request: Request) -> str:
+    # Cloudflare sets this header with the real visitor IP
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        return cf_ip.strip()
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
