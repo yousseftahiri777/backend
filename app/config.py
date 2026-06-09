@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     SNAP_ACCESS_TOKEN: str = ""
     SNAP_PIXEL_ID: str = ""
     # Comma-separated origins, e.g. "https://lamabeauty.shop,http://localhost:3000"
-    ALLOWED_ORIGINS: str = "https://lamabeauty.shop,http://localhost:3000"
+    ALLOWED_ORIGINS: str = "https://lamabeauty.shop,https://www.lamabeauty.shop,http://localhost:3000,http://localhost:3001,http://localhost:3002"
     TEST_PHONE: str = "0550000000"
 
     def get_allowed_origins(self) -> list[str]:
