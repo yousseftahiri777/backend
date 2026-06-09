@@ -16,10 +16,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Whitelisted test phones bypass all geo/VPN checks (see TEST_PHONE in .env)
-_TEST_PHONES: set[str] = {
-    settings.TEST_PHONE.strip(),
-    "0513194328",
-}
+def _normalize_phone(phone: str) -> str:
+    p = phone.strip().replace(" ", "").replace("-", "")
+    if p.startswith("+966"):
+        return "0" + p[4:]
+    if p.startswith("966"):
+        return "0" + p[3:]
+    if p.startswith("5"):
+        return "0" + p
+    return p
+
+_RAW_TEST_PHONES = [settings.TEST_PHONE.strip(), "0513194328"]
+_TEST_PHONES: set[str] = {p for raw in _RAW_TEST_PHONES for p in (raw, _normalize_phone(raw), "+966" + _normalize_phone(raw)[1:])}
 
 
 def get_client_ip(request: Request) -> str:
