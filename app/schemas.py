@@ -17,6 +17,7 @@ class OrderItemSchema(BaseModel):
 class CreateOrderSchema(BaseModel):
     customerName: str
     phone: str
+    city: Optional[str] = None
     items: List[OrderItemSchema]
     subtotal: float
     total: float
@@ -50,11 +51,26 @@ class CreateOrderSchema(BaseModel):
         return v
 
 
+class UpsellUpdateSchema(BaseModel):
+    upsellAccepted: bool = True
+    upsellProduct: str
+    upsellPrice: float
+    newTotal: float
+    nameAr: Optional[str] = None
+
+
+class ContactSchema(BaseModel):
+    name: str
+    email: str
+    message: str
+
+
 class OrderResponse(BaseModel):
     id: uuid.UUID
     orderId: str
     customerName: str
     phone: str
+    city: Optional[str] = None
     items: List[Dict[str, Any]]
     subtotal: float
     shipping: float
@@ -78,6 +94,7 @@ class OrderResponse(BaseModel):
             orderId=order.order_id,
             customerName=order.customer_name,
             phone=order.phone,
+            city=getattr(order, "city", None),
             items=order.items,
             subtotal=order.subtotal,
             shipping=order.shipping,

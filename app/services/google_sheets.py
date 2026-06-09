@@ -26,6 +26,7 @@ async def send_to_sheets(order_data: dict) -> None:
         "orderId": order_data.get("orderId", ""),
         "customerName": order_data.get("customerName", ""),
         "phone": order_data.get("phone", ""),
+        "city": order_data.get("city", ""),
         "items": json.dumps(items, ensure_ascii=False),
         "packageTier": package_tier,
         "upsellAccepted": order_data.get("upsellAccepted", False),

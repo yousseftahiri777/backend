@@ -13,6 +13,7 @@ class Order(Base):
     order_id = Column(String, unique=True, nullable=False, index=True)
     customer_name = Column(String, nullable=False)
     phone = Column(String, nullable=False)
+    city = Column(String, nullable=True)
     items = Column(JSON, nullable=False)
     subtotal = Column(Float, nullable=False)
     shipping = Column(Float, nullable=False, default=0.0)

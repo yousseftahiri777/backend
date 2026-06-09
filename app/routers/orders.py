@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Order, OrderItem
-from app.schemas import CreateOrderSchema, OrderResponse
+from app.schemas import CreateOrderSchema, OrderResponse, UpsellUpdateSchema
 from app.config import settings
 from app.services import maxmind
 from app.services.google_sheets import send_to_sheets
@@ -105,6 +105,7 @@ async def create_order(
         order_id=order_id,
         customer_name=payload.customerName,
         phone=payload.phone,
+        city=payload.city,
         items=[item.model_dump() for item in payload.items],
         subtotal=payload.subtotal,
         shipping=payload.shipping,
@@ -138,6 +139,7 @@ async def create_order(
         "orderId": order.order_id,
         "customerName": order.customer_name,
         "phone": order.phone,
+        "city": order.city,
         "items": order.items,
         "subtotal": order.subtotal,
         "shipping": order.shipping,
@@ -178,4 +180,63 @@ async def get_order(order_id: str, db: Session = Depends(get_db)):
     order = db.query(Order).filter(Order.order_id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="الطلب غير موجود.")
+    return OrderResponse.from_orm_order(order)
+
+
+@router.patch("/orders/{order_id}/upsell", response_model=OrderResponse)
+async def update_order_upsell(
+    order_id: str,
+    payload: UpsellUpdateSchema,
+    db: Session = Depends(get_db),
+):
+    order = db.query(Order).filter(Order.order_id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود.")
+
+    if order.upsell_accepted:
+        return OrderResponse.from_orm_order(order)
+
+    upsell_name = payload.nameAr or payload.upsellProduct
+    new_item = {
+        "productId": payload.upsellProduct,
+        "nameAr": upsell_name,
+        "qty": 1,
+        "price": payload.upsellPrice,
+    }
+    updated_items = list(order.items or [])
+    updated_items.append(new_item)
+
+    order.upsell_accepted = payload.upsellAccepted
+    order.upsell_product = payload.upsellProduct
+    order.items = updated_items
+    order.total = payload.newTotal
+    order.updated_at = datetime.utcnow()
+
+    db.add(OrderItem(
+        order_id=order.id,
+        product_id=payload.upsellProduct,
+        name_ar=upsell_name,
+        qty=1,
+        price=payload.upsellPrice,
+    ))
+    db.commit()
+    db.refresh(order)
+
+    order_dict = {
+        "orderId": order.order_id,
+        "customerName": order.customer_name,
+        "phone": order.phone,
+        "city": order.city,
+        "items": order.items,
+        "subtotal": order.subtotal,
+        "shipping": order.shipping,
+        "total": order.total,
+        "upsellAccepted": order.upsell_accepted,
+        "upsellProduct": order.upsell_product,
+        "ipAddress": order.ip_address,
+        "status": order.status,
+        "createdAt": order.created_at.isoformat(),
+    }
+    asyncio.create_task(send_to_sheets(order_dict))
+
     return OrderResponse.from_orm_order(order)
