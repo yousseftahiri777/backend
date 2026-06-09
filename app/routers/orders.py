@@ -66,7 +66,22 @@ async def create_order(
             "is_allowed": True,
         }
     else:
-        geo = await maxmind.check_ip(ip)
+        # Use Cloudflare country header first (free, reliable, no API calls)
+        cf_country = request.headers.get("CF-IPCountry", "").upper().strip()
+        if cf_country and cf_country not in ("", "XX", "T1"):
+            is_allowed = cf_country == "SA"
+            geo = {
+                "country_code": cf_country,
+                "city": None,
+                "is_vpn": cf_country == "T1",
+                "is_proxy": False,
+                "is_suspicious": not is_allowed,
+                "is_allowed": is_allowed,
+            }
+            logger.info("Cloudflare country check: IP=%s country=%s allowed=%s", ip, cf_country, is_allowed)
+        else:
+            # Fallback to MaxMind if Cloudflare header not available
+            geo = await maxmind.check_ip(ip)
 
     if not geo["is_allowed"]:
         logger.warning(
