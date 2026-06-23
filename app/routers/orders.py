@@ -8,27 +8,13 @@ from app.database import get_db
 from app.models import Order, OrderItem
 from app.schemas import CreateOrderSchema, OrderResponse, UpsellUpdateSchema
 from app.config import settings
+from app.phone_utils import is_whitelisted_test_phone, normalize_ksa_phone_local
 from app.services import maxmind
 from app.services.google_sheets import send_to_sheets
 from app.services.pixels import send_fb_capi, send_tiktok_events, send_snap_capi
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# Whitelisted test phones bypass all geo/VPN checks (see TEST_PHONE in .env)
-def _normalize_phone(phone: str) -> str:
-    p = phone.strip().replace(" ", "").replace("-", "")
-    if p.startswith("+966"):
-        return "0" + p[4:]
-    if p.startswith("966"):
-        return "0" + p[3:]
-    if p.startswith("5"):
-        return "0" + p
-    return p
-
-_RAW_TEST_PHONES = [settings.TEST_PHONE.strip(), "0513194328"]
-_TEST_PHONES: set[str] = {p for raw in _RAW_TEST_PHONES for p in (raw, _normalize_phone(raw), "+966" + _normalize_phone(raw)[1:])}
-
 
 def get_client_ip(request: Request) -> str:
     # Cloudflare sets this header with the real visitor IP
@@ -61,10 +47,16 @@ async def create_order(
     db: Session = Depends(get_db),
 ):
     ip = get_client_ip(request)
-    is_test = payload.phone in _TEST_PHONES
+    test_locals = settings.get_test_phone_locals()
+    is_test = is_whitelisted_test_phone(payload.phone, test_locals)
 
     if is_test:
-        logger.info("Test phone %s — bypassing geo checks for IP %s", payload.phone, ip)
+        logger.info(
+            "Test phone bypass: input=%s local=%s ip=%s",
+            payload.phone,
+            normalize_ksa_phone_local(payload.phone),
+            ip,
+        )
         geo = {
             "country_code": "SA",
             "city": None,

@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     def get_allowed_origins(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
+    def get_test_phone_locals(self) -> set[str]:
+        """Numbers that bypass MaxMind / Cloudflare geo blocking (local 05XXXXXXXX)."""
+        primary = (self.TEST_PHONE or "0550000000").strip() or "0550000000"
+        from app.phone_utils import build_test_phone_locals
+
+        return build_test_phone_locals(primary, "0513194328")
+
 
 settings = Settings()
 
