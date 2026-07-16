@@ -56,3 +56,21 @@ class TrackingEvent(Base):
     custom_data = Column(JSON, nullable=False, default=dict)
     ip_address = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class PageView(Base):
+    __tablename__ = "page_views"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(String, nullable=False, index=True)
+    path = Column(String, nullable=False, index=True)
+    referrer = Column(String, nullable=True)
+    utm_source = Column(String, nullable=True)
+    utm_medium = Column(String, nullable=True)
+    utm_campaign = Column(String, nullable=True)
+    ip_address = Column(String, nullable=False)
+    country_code = Column(String(10), nullable=True)
+    city = Column(String, nullable=True)
+    is_vpn = Column(Boolean, nullable=False, default=False)
+    is_valid = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)

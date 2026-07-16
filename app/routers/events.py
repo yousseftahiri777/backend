@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import TrackingEvent
 from app.schemas import EventTrackSchema
+from app.services.geo import get_client_ip
 from app.services.pixels import send_fb_capi, send_tiktok_events, send_snap_capi
 
 router = APIRouter()
@@ -27,7 +28,7 @@ async def track_event(
         event_time=payload.event_time,
         user_data=payload.user_data,
         custom_data=payload.custom_data,
-        ip_address=request.client.host if request.client else None,
+        ip_address=get_client_ip(request),
         created_at=datetime.utcnow(),
     )
     try:

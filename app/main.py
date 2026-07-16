@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from app.config import settings
 from app.db_migrate import run_migrations
-from app.routers import orders, events, contact
+from app.routers import orders, events, contact, admin, analytics
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,8 @@ app.add_middleware(
 app.include_router(orders.router, prefix="/api/v1")
 app.include_router(events.router, prefix="/api/v1")
 app.include_router(contact.router, prefix="/api/v1")
+app.include_router(analytics.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
 
 
 @app.exception_handler(SQLAlchemyError)

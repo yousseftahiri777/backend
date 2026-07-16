@@ -33,3 +33,16 @@ def build_test_phone_locals(*raw_numbers: str) -> set[str]:
 def is_whitelisted_test_phone(phone: str, whitelist_locals: set[str]) -> bool:
     local = normalize_ksa_phone_local(phone)
     return bool(local) and local in whitelist_locals
+
+
+def format_ksa_phone_international(phone: str) -> str:
+    """Format Saudi mobile as 9665XXXXXXXX (no + sign)."""
+    local = normalize_ksa_phone_local(phone)
+    if len(local) == 10 and local.startswith("05"):
+        return f"966{local[1:]}"
+    digits = _DIGITS_ONLY.sub("", phone.strip())
+    if digits.startswith("966"):
+        return digits
+    if len(digits) == 9 and digits.startswith("5"):
+        return f"966{digits}"
+    return digits

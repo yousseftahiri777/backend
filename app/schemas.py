@@ -117,3 +117,70 @@ class EventTrackSchema(BaseModel):
     event_time: int
     user_data: Dict[str, Any]
     custom_data: Dict[str, Any]
+
+
+class PageViewSchema(BaseModel):
+    sessionId: str
+    path: str
+    referrer: Optional[str] = None
+    utmSource: Optional[str] = None
+    utmMedium: Optional[str] = None
+    utmCampaign: Optional[str] = None
+
+
+class AdminLoginSchema(BaseModel):
+    username: str
+    password: str
+
+
+class AdminLoginResponse(BaseModel):
+    token: str
+    expiresAt: int
+    username: str
+
+
+class AdminOrderListItem(BaseModel):
+    id: uuid.UUID
+    orderId: str
+    customerName: str
+    phone: str
+    city: Optional[str] = None
+    total: float
+    status: str
+    upsellAccepted: bool
+    countryCode: Optional[str]
+    isVpn: bool
+    itemCount: int
+    createdAt: datetime
+
+
+class AdminOrderListResponse(BaseModel):
+    orders: List[AdminOrderListItem]
+    total: int
+    page: int
+    pageSize: int
+
+
+class AdminOrderDetailResponse(OrderResponse):
+    updatedAt: datetime
+    orderItems: List[Dict[str, Any]]
+
+
+class AdminStatusUpdateSchema(BaseModel):
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        allowed = {
+            "pending_confirmation",
+            "confirmed",
+            "preparing",
+            "shipped",
+            "delivered",
+            "rto",
+            "cancelled",
+        }
+        if v not in allowed:
+            raise ValueError(f"Invalid status. Allowed: {', '.join(sorted(allowed))}")
+        return v

@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "https://lamabeauty.shop,https://www.lamabeauty.shop,http://localhost:3000,http://localhost:3001,http://localhost:3002"
     TEST_PHONE: str = "0550000000"
 
+    # Admin dashboard — secret URL key (recommended) or username/password fallback
+    ADMIN_ACCESS_KEY: str = ""
+    ADMIN_USERNAME: str = ""
+    ADMIN_PASSWORD: str = ""
+    ADMIN_JWT_SECRET: str = ""
+
     def get_allowed_origins(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 

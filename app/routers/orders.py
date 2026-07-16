@@ -9,25 +9,12 @@ from app.models import Order, OrderItem
 from app.schemas import CreateOrderSchema, OrderResponse, UpsellUpdateSchema
 from app.config import settings
 from app.phone_utils import is_whitelisted_test_phone, normalize_ksa_phone_local
-from app.services import maxmind
+from app.services.geo import get_client_ip, resolve_geo
 from app.services.google_sheets import send_to_sheets
 from app.services.pixels import send_fb_capi, send_tiktok_events, send_snap_capi
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-def get_client_ip(request: Request) -> str:
-    # Cloudflare sets this header with the real visitor IP
-    cf_ip = request.headers.get("CF-Connecting-IP")
-    if cf_ip:
-        return cf_ip.strip()
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-    return request.client.host if request.client else "127.0.0.1"
 
 
 def _geo_block_detail(geo: dict) -> str:
@@ -66,22 +53,7 @@ async def create_order(
             "is_allowed": True,
         }
     else:
-        # Use Cloudflare country header (forwarded by Next.js proxy as X-CF-IPCountry)
-        cf_country = (request.headers.get("X-CF-IPCountry") or request.headers.get("CF-IPCountry", "")).upper().strip()
-        if cf_country and cf_country not in ("", "XX", "T1"):
-            is_allowed = cf_country == "SA"
-            geo = {
-                "country_code": cf_country,
-                "city": None,
-                "is_vpn": cf_country == "T1",
-                "is_proxy": False,
-                "is_suspicious": not is_allowed,
-                "is_allowed": is_allowed,
-            }
-            logger.info("Cloudflare country check: IP=%s country=%s allowed=%s", ip, cf_country, is_allowed)
-        else:
-            # Fallback to MaxMind if Cloudflare header not available
-            geo = await maxmind.check_ip(ip)
+        geo = await resolve_geo(request, ip)
 
     if not geo["is_allowed"]:
         logger.warning(
@@ -91,7 +63,7 @@ async def create_order(
         )
         raise HTTPException(status_code=403, detail=_geo_block_detail(geo))
 
-    order_id = f"LM-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    order_id = f"lama-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
     order = Order(
         order_id=order_id,
