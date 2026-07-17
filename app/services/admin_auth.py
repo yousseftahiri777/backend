@@ -16,7 +16,12 @@ TOKEN_TTL_SECONDS = 60 * 60 * 12
 
 
 def _jwt_secret() -> bytes:
-    return settings.ADMIN_JWT_SECRET.strip().encode()
+    key = (
+        settings.ADMIN_JWT_SECRET.strip()
+        or settings.ADMIN_ACCESS_KEY.strip()
+        or settings.ADMIN_PASSWORD.strip()
+    )
+    return key.encode()
 
 
 def verify_access_key(key: str) -> bool:

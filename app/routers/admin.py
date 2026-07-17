@@ -84,11 +84,10 @@ async def admin_login(
     if (
         not settings.ADMIN_USERNAME.strip()
         or not settings.ADMIN_PASSWORD.strip()
-        or not settings.ADMIN_JWT_SECRET.strip()
     ):
         raise HTTPException(
             status_code=503,
-            detail="Admin login is not configured. Set ADMIN_USERNAME, ADMIN_PASSWORD, and ADMIN_JWT_SECRET.",
+            detail="Admin login is not configured. Set ADMIN_USERNAME and ADMIN_PASSWORD.",
         )
     username = payload.username.strip()
     ip = get_client_ip(request)

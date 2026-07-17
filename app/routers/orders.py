@@ -30,7 +30,13 @@ def _token_hash(token: str) -> str:
 
 
 def _public_token(order_id: str, event_id: str) -> str:
-    secret = settings.ORDER_TOKEN_SECRET.strip()
+    secret = (
+        settings.ORDER_TOKEN_SECRET.strip()
+        or settings.ADMIN_JWT_SECRET.strip()
+        or settings.ADMIN_ACCESS_KEY.strip()
+        or settings.ADMIN_PASSWORD.strip()
+        or settings.MAXMIND_LICENSE_KEY.strip()
+    )
     if not secret:
         raise HTTPException(status_code=503, detail="Order security is not configured.")
     return hmac.new(

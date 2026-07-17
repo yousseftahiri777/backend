@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    settings.validate_runtime_security()
     worker = asyncio.create_task(sheet_sync_loop())
     try:
         yield
