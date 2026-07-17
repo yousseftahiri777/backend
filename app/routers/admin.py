@@ -1,8 +1,11 @@
+import csv
+import io
 import logging
 from datetime import datetime, date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -28,6 +31,12 @@ VALID_ORDER_FILTER = (
     (Order.country_code == "SA")
     & (Order.is_vpn.is_(False))
 )
+
+
+def _csv_safe(value: object) -> object:
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
 
 
 @router.post("/login", response_model=AdminLoginResponse)
@@ -122,6 +131,81 @@ async def admin_list_orders(
         )
 
     return AdminOrderListResponse(orders=items, total=total, page=page, pageSize=page_size)
+
+
+@router.get("/orders/export")
+async def admin_export_orders(
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    start: Optional[date] = Query(None),
+    end: Optional[date] = Query(None),
+    _admin: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Order).filter(VALID_ORDER_FILTER)
+    if status:
+        q = q.filter(Order.status == status)
+    if start:
+        q = q.filter(Order.created_at >= datetime.combine(start, datetime.min.time()))
+    if end:
+        q = q.filter(Order.created_at < datetime.combine(end, datetime.max.time()))
+    if search:
+        term = f"%{search.strip()}%"
+        q = q.filter(
+            or_(
+                Order.order_id.ilike(term),
+                Order.customer_name.ilike(term),
+                Order.phone.ilike(term),
+                Order.city.ilike(term),
+            )
+        )
+
+    output = io.StringIO()
+    output.write("\ufeff")
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "DATE",
+            "ORDER ID",
+            "COUNTRY",
+            "NAME",
+            "PHONE",
+            "CITY",
+            "PRODUCT",
+            "QUANTITY",
+            "TOTAL PRICE",
+            "CURRENCY",
+            "STATUS",
+        ]
+    )
+    for order in q.order_by(Order.created_at.desc()).all():
+        order_items = order.items or []
+        products = " / ".join(
+            str(item.get("nameAr") or item.get("productId") or "") for item in order_items
+        )
+        quantities = " / ".join(str(item.get("qty", 1)) for item in order_items)
+        writer.writerow(
+            [
+                order.created_at.strftime("%d/%m/%Y %H:%M"),
+                order.order_id,
+                order.country_code or "SA",
+                _csv_safe(order.customer_name),
+                _csv_safe(order.phone),
+                _csv_safe(order.city or ""),
+                _csv_safe(products),
+                quantities,
+                order.total,
+                "SAR",
+                order.status,
+            ]
+        )
+
+    filename = f"lama-orders-{date.today().isoformat()}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/orders/{order_id}", response_model=AdminOrderDetailResponse)
