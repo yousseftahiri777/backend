@@ -1,4 +1,4 @@
-"""Simple admin auth — secret URL key and optional JWT login."""
+"""Admin password authentication with signed short-lived bearer sessions."""
 
 import base64
 import hmac
@@ -12,18 +12,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.config import settings
 
 _bearer = HTTPBearer(auto_error=False)
-TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
+TOKEN_TTL_SECONDS = 60 * 60 * 12
 
 
 def _jwt_secret() -> bytes:
-    key = (
-        settings.ADMIN_JWT_SECRET.strip()
-        or settings.ADMIN_ACCESS_KEY.strip()
-        or settings.ADMIN_PASSWORD.strip()
-    )
-    if not key:
-        return b""
-    return key.encode()
+    return settings.ADMIN_JWT_SECRET.strip().encode()
 
 
 def verify_access_key(key: str) -> bool:
@@ -34,6 +27,8 @@ def verify_access_key(key: str) -> bool:
 
 
 def create_admin_token(username: str) -> tuple[str, int]:
+    if not _jwt_secret():
+        raise RuntimeError("ADMIN_JWT_SECRET is not configured")
     exp = int(time.time()) + TOKEN_TTL_SECONDS
     payload = f"{username}:{exp}"
     sig = hmac.new(_jwt_secret(), payload.encode(), sha256).hexdigest()
@@ -71,7 +66,11 @@ def require_admin(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     x_admin_access_key: str | None = Header(None, alias="X-Admin-Access-Key"),
 ) -> str:
-    if x_admin_access_key and verify_access_key(x_admin_access_key):
+    if (
+        settings.ENABLE_LEGACY_ADMIN_ACCESS_KEY
+        and x_admin_access_key
+        and verify_access_key(x_admin_access_key)
+    ):
         return "admin"
 
     if credentials and credentials.scheme.lower() == "bearer":

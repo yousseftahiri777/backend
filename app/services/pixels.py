@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import re
 import time
 import httpx
 from app.config import settings
@@ -11,6 +12,11 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.strip().lower().encode()).hexdigest()
 
 
+def _hash_if_needed(value: str) -> str:
+    normalized = value.strip().lower()
+    return normalized if re.fullmatch(r"[0-9a-f]{64}", normalized) else _sha256(normalized)
+
+
 async def send_fb_capi(event_data: dict) -> None:
     if not settings.FB_ACCESS_TOKEN or not settings.FB_PIXEL_ID:
         return
@@ -20,9 +26,9 @@ async def send_fb_capi(event_data: dict) -> None:
 
     hashed_user_data = {}
     if user_data.get("ph"):
-        hashed_user_data["ph"] = [_sha256(user_data["ph"])]
+        hashed_user_data["ph"] = [_hash_if_needed(user_data["ph"])]
     if user_data.get("em"):
-        hashed_user_data["em"] = [_sha256(user_data["em"])]
+        hashed_user_data["em"] = [_hash_if_needed(user_data["em"])]
     if user_data.get("client_ip_address"):
         hashed_user_data["client_ip_address"] = user_data["client_ip_address"]
     if user_data.get("client_user_agent"):
@@ -81,9 +87,9 @@ async def send_tiktok_events(event_data: dict) -> None:
 
     contact = {}
     if user_data.get("ph"):
-        contact["phone_number"] = _sha256(user_data["ph"])
+        contact["phone_number"] = _hash_if_needed(user_data["ph"])
     if user_data.get("em"):
-        contact["email"] = _sha256(user_data["em"])
+        contact["email"] = _hash_if_needed(user_data["em"])
 
     payload = {
         "pixel_code": settings.TIKTOK_PIXEL_ID,
@@ -116,8 +122,8 @@ async def send_snap_capi(event_data: dict) -> None:
     user_data = event_data.get("user_data", {})
     custom_data = event_data.get("custom_data", {})
 
-    hashed_phone = _sha256(user_data["ph"]) if user_data.get("ph") else None
-    hashed_email = _sha256(user_data["em"]) if user_data.get("em") else None
+    hashed_phone = _hash_if_needed(user_data["ph"]) if user_data.get("ph") else None
+    hashed_email = _hash_if_needed(user_data["em"]) if user_data.get("em") else None
 
     snap_user_data = {
         "client_ip_address": user_data.get("client_ip_address", ""),

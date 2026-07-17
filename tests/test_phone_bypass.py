@@ -23,7 +23,5 @@ def test_whitelist_matches_all_formats():
     assert not is_whitelisted_test_phone("0501234567", whitelist)
 
 
-def test_empty_env_fallback_number():
-    whitelist = build_test_phone_locals("", "0513194328")
-    assert "0550000000" not in whitelist
-    assert is_whitelisted_test_phone("0513194328", whitelist)
+def test_empty_env_has_no_fallback_number():
+    assert build_test_phone_locals("") == set()
