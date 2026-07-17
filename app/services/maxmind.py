@@ -8,7 +8,8 @@ Blocks orders from:
 
 Results are cached in-memory for CACHE_TTL_SECONDS to reduce API costs.
 
-Failures are fail-closed by default; GEO_FAIL_OPEN may be enabled for local development.
+If MAXMIND_ACCOUNT_ID or MAXMIND_LICENSE_KEY are not configured, the service
+runs in permissive mode (all requests allowed) — safe for local development.
 """
 
 import base64
@@ -26,17 +27,6 @@ CACHE_TTL_SECONDS = 3600  # re-check each unique IP at most once per hour
 _cache: dict[str, tuple[dict, float]] = {}
 
 MAXMIND_INSIGHTS_URL = "https://geoip.maxmind.com/geoip/v2.1/insights/{ip}"
-
-
-def _failure_result() -> dict:
-    return {
-        "country_code": None,
-        "city": None,
-        "is_vpn": False,
-        "is_proxy": False,
-        "is_suspicious": not settings.GEO_FAIL_OPEN,
-        "is_allowed": settings.GEO_FAIL_OPEN,
-    }
 
 
 def _build_auth_header() -> Optional[str]:
@@ -76,22 +66,35 @@ async def check_ip(ip: str) -> dict:
     if ip in _cache:
         result, cached_at = _cache[ip]
         if time.monotonic() - cached_at < CACHE_TTL_SECONDS:
-            logger.debug("MaxMind cache hit")
+            logger.debug("MaxMind cache hit for %s", ip)
             return result
 
     # ── Dev / unconfigured mode ────────────────────────────────────────────────
     auth_header = _build_auth_header()
     if auth_header is None:
         logger.warning(
-            "MaxMind credentials not configured — applying GEO_FAIL_OPEN=%s.",
-            settings.GEO_FAIL_OPEN,
+            "MaxMind credentials not configured — geo checks DISABLED, all requests allowed."
         )
-        return _failure_result()
+        return {
+            "country_code": "SA",
+            "city": None,
+            "is_vpn": False,
+            "is_proxy": False,
+            "is_suspicious": False,
+            "is_allowed": True,
+        }
 
-    # Private IPs cannot be verified; use the explicit failure policy.
+    # ── Skip private / loopback IPs (local dev) ────────────────────────────────
     if ip in ("127.0.0.1", "::1") or ip.startswith(("10.", "192.168.", "172.")):
-        logger.debug("Private IP — applying geo failure policy.")
-        result = _failure_result()
+        logger.debug("Private IP %s — skipping MaxMind lookup, allowing.", ip)
+        result = {
+            "country_code": "SA",
+            "city": None,
+            "is_vpn": False,
+            "is_proxy": False,
+            "is_suspicious": False,
+            "is_allowed": True,
+        }
         _cache[ip] = (result, time.monotonic())
         return result
 
@@ -130,13 +133,13 @@ async def check_ip(ip: str) -> dict:
                 "is_allowed": allowed,
             }
             logger.info(
-                "MaxMind: country=%s vpn=%s proxy=%s suspicious=%s allowed=%s",
-                country_code, is_vpn, is_proxy, suspicious, allowed,
+                "MaxMind [%s]: country=%s vpn=%s proxy=%s suspicious=%s allowed=%s",
+                ip, country_code, is_vpn, is_proxy, suspicious, allowed,
             )
 
         elif resp.status_code in (400, 404):
             # Invalid IP format or reserved/bogon — treat as suspicious
-            logger.warning("MaxMind returned %s — blocking.", resp.status_code)
+            logger.warning("MaxMind returned %s for IP %s — blocking.", resp.status_code, ip)
             result = {
                 "country_code": None,
                 "city": None,
@@ -147,17 +150,39 @@ async def check_ip(ip: str) -> dict:
             }
 
         else:
+            # 5xx or unexpected — fail open (allow) to avoid blocking legit orders
             logger.error(
-                "MaxMind API error %s — applying failure policy.", resp.status_code
+                "MaxMind API error %s for IP %s — failing open.", resp.status_code, ip
             )
-            result = _failure_result()
+            result = {
+                "country_code": None,
+                "city": None,
+                "is_vpn": False,
+                "is_proxy": False,
+                "is_suspicious": False,
+                "is_allowed": True,
+            }
 
     except httpx.TimeoutException:
-        logger.error("MaxMind API timeout — applying failure policy.")
-        result = _failure_result()
+        logger.error("MaxMind API timeout for IP %s — failing open.", ip)
+        result = {
+            "country_code": None,
+            "city": None,
+            "is_vpn": False,
+            "is_proxy": False,
+            "is_suspicious": False,
+            "is_allowed": True,
+        }
     except Exception as exc:
-        logger.error("MaxMind unexpected error: %s", exc)
-        result = _failure_result()
+        logger.error("MaxMind unexpected error for IP %s: %s — failing open.", ip, exc)
+        result = {
+            "country_code": None,
+            "city": None,
+            "is_vpn": False,
+            "is_proxy": False,
+            "is_suspicious": False,
+            "is_allowed": True,
+        }
 
     _cache[ip] = (result, time.monotonic())
     return result

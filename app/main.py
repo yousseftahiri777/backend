@@ -1,37 +1,31 @@
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from app.config import settings
-from app.database import SessionLocal
+from app.db_migrate import run_migrations
 from app.routers import orders, events, contact, admin, analytics
-from app.services.google_sheets import sheet_sync_loop
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    worker = asyncio.create_task(sheet_sync_loop())
     try:
-        yield
-    finally:
-        worker.cancel()
-        try:
-            await worker
-        except asyncio.CancelledError:
-            pass
+        run_migrations()
+    except Exception as exc:
+        logger.error("Startup migration failed: %s", exc)
+        raise
+    yield
 
 
 app = FastAPI(
     title="LAMÁ API",
     version="1.0.0",
-    docs_url="/docs" if settings.ENABLE_DOCS else None,
-    redoc_url="/redoc" if settings.ENABLE_DOCS else None,
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan,
 )
 
@@ -61,12 +55,7 @@ async def database_error_handler(_request: Request, exc: SQLAlchemyError):
 
 @app.get("/health")
 async def health_check():
-    try:
-        with SessionLocal() as db:
-            db.execute(text("SELECT 1"))
-    except SQLAlchemyError:
-        return JSONResponse(status_code=503, content={"status": "unhealthy"})
-    return {"status": "healthy", "database": "connected"}
+    return {"status": "healthy"}
 
 
 @app.get("/")

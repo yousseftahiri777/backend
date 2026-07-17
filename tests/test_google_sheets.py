@@ -21,13 +21,7 @@ def test_build_sheets_payload_multi_item():
             "orderId": "lama-20260601-ABC123",
             "customerName": "أحمد",
             "phone": "0504752330",
-            "city": "الرياض",
-            "subtotal": 149,
-            "shipping": 0,
             "total": 149,
-            "status": "confirmed",
-            "source": "website",
-            "upsellProduct": "safaa-patches",
             "createdAt": "2026-06-01T10:00:00",
             "items": [
                 {"productId": "sweat-shield", "nameAr": "درع العرق اليومي", "qty": 2, "price": 89},
@@ -44,11 +38,6 @@ def test_build_sheets_payload_multi_item():
     assert payload["product"] == "درع العرق اليومي/نسمة — بخاخ إنعاش الحذاء والقدم"
     assert payload["sku"] == "LAMA-SWEAT-01/LAMA-NASMA-01"
     assert payload["quantity"] == "2/1"
-    assert payload["subtotal"] == 149
-    assert payload["shipping"] == 0
     assert payload["totalPrice"] == 149
     assert payload["currency"] == "SAR"
-    assert payload["status"] == "confirmed"
-    assert payload["city"] == "الرياض"
-    assert payload["source"] == "website"
-    assert payload["upsell"] == "safaa-patches"
+    assert payload["status"] == ""

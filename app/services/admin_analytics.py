@@ -15,13 +15,10 @@ VALID_ORDER_FILTER = (
 
 VALID_PAGE_VIEW_FILTER = PageView.is_valid.is_(True)
 CONFIRMED_STATUSES = ("confirmed", "preparing", "shipped", "delivered")
-KSA_OFFSET = timedelta(hours=3)
 
 
 def get_metrics(db: Session, start: datetime, end: datetime) -> dict[str, Any]:
     end_exclusive = end + timedelta(days=1)
-    order_day_ksa = cast(Order.created_at + KSA_OFFSET, Date)
-    pageview_day_ksa = cast(PageView.created_at + KSA_OFFSET, Date)
 
     clicks = (
         db.query(func.count(PageView.id))
@@ -52,33 +49,10 @@ def get_metrics(db: Session, start: datetime, end: datetime) -> dict[str, Any]:
     )
     order_count = orders_q.count()
     confirmed_order_count = orders_q.filter(Order.status.in_(CONFIRMED_STATUSES)).count()
-    gross_revenue = (
+    revenue = (
         db.query(func.coalesce(func.sum(Order.total), 0.0))
         .filter(
             VALID_ORDER_FILTER,
-            Order.created_at >= start,
-            Order.created_at < end_exclusive,
-        )
-        .scalar()
-        or 0.0
-    )
-    confirmed_revenue = (
-        db.query(func.coalesce(func.sum(Order.total), 0.0))
-        .filter(
-            VALID_ORDER_FILTER,
-            Order.status.in_(CONFIRMED_STATUSES),
-            Order.created_at >= start,
-            Order.created_at < end_exclusive,
-        )
-        .scalar()
-        or 0.0
-    )
-    delivered_order_count = orders_q.filter(Order.status == "delivered").count()
-    delivered_revenue = (
-        db.query(func.coalesce(func.sum(Order.total), 0.0))
-        .filter(
-            VALID_ORDER_FILTER,
-            Order.status == "delivered",
             Order.created_at >= start,
             Order.created_at < end_exclusive,
         )
@@ -102,7 +76,6 @@ def get_metrics(db: Session, start: datetime, end: datetime) -> dict[str, Any]:
         db.query(func.count(TrackingEvent.id))
         .filter(
             TrackingEvent.event_name == "InitiateCheckout",
-            TrackingEvent.is_valid.is_(True),
             TrackingEvent.created_at >= start,
             TrackingEvent.created_at < end_exclusive,
         )
@@ -124,22 +97,12 @@ def get_metrics(db: Session, start: datetime, end: datetime) -> dict[str, Any]:
     conversion_rate = round((order_count / unique_visitors * 100), 2) if unique_visitors else 0.0
     checkout_rate = round((checkout_starts / unique_visitors * 100), 2) if unique_visitors else 0.0
     checkout_conversion_rate = round((order_count / checkout_starts * 100), 2) if checkout_starts else 0.0
-    gross_aov = round(float(gross_revenue) / order_count, 2) if order_count else 0.0
-    confirmed_aov = (
-        round(float(confirmed_revenue) / confirmed_order_count, 2)
-        if confirmed_order_count
-        else 0.0
-    )
-    delivered_aov = (
-        round(float(delivered_revenue) / delivered_order_count, 2)
-        if delivered_order_count
-        else 0.0
-    )
+    aov = round(revenue / order_count, 2) if order_count else 0.0
     upsell_rate = round((upsell_count / order_count * 100), 2) if order_count else 0.0
 
     daily_rows = (
         db.query(
-            order_day_ksa.label("day"),
+            cast(Order.created_at, Date).label("day"),
             func.count(Order.id).label("orders"),
             func.coalesce(func.sum(Order.total), 0.0).label("revenue"),
         )
@@ -148,14 +111,14 @@ def get_metrics(db: Session, start: datetime, end: datetime) -> dict[str, Any]:
             Order.created_at >= start,
             Order.created_at < end_exclusive,
         )
-        .group_by(order_day_ksa)
-        .order_by(order_day_ksa)
+        .group_by("day")
+        .order_by("day")
         .all()
     )
 
     click_rows = (
         db.query(
-            pageview_day_ksa.label("day"),
+            cast(PageView.created_at, Date).label("day"),
             func.count(PageView.id).label("clicks"),
             func.count(func.distinct(PageView.session_id)).label("visitors"),
         )
@@ -164,8 +127,8 @@ def get_metrics(db: Session, start: datetime, end: datetime) -> dict[str, Any]:
             PageView.created_at >= start,
             PageView.created_at < end_exclusive,
         )
-        .group_by(pageview_day_ksa)
-        .order_by(pageview_day_ksa)
+        .group_by("day")
+        .order_by("day")
         .all()
     )
 
@@ -262,15 +225,8 @@ def get_metrics(db: Session, start: datetime, end: datetime) -> dict[str, Any]:
             "uniqueVisitors": unique_visitors,
             "orders": order_count,
             "confirmedOrders": confirmed_order_count,
-            "revenue": round(float(gross_revenue), 2),
-            "aov": gross_aov,
-            "grossRevenue": round(float(gross_revenue), 2),
-            "grossAov": gross_aov,
-            "confirmedRevenue": round(float(confirmed_revenue), 2),
-            "confirmedAov": confirmed_aov,
-            "deliveredOrders": delivered_order_count,
-            "deliveredRevenue": round(float(delivered_revenue), 2),
-            "deliveredAov": delivered_aov,
+            "revenue": round(float(revenue), 2),
+            "aov": aov,
             "conversionRate": conversion_rate,
             "checkoutStarts": checkout_starts,
             "checkoutRate": checkout_rate,

@@ -1,3 +1,28 @@
+"""compatibility marker after production rollback
+
+Revision ID: 006
+Revises: 005
+Create Date: 2026-07-17 00:00:00.000000
+
+The first 006 deployment may already have stamped production. Keep the revision
+available so the stable application can start against either schema state.
+"""
+
+from typing import Sequence, Union
+
+
+revision: str = "006"
+down_revision: Union[str, None] = "005"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    pass
+
+
+def downgrade() -> None:
+    pass
 """secure commerce, public tokens, geo events, and Sheets outbox
 
 Revision ID: 006

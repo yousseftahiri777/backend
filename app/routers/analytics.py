@@ -1,14 +1,14 @@
 import uuid
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import PageView
 from app.schemas import PageViewSchema
-from app.services.geo import get_client_ip, require_trusted_proxy, resolve_geo
+from app.services.geo import get_client_ip, resolve_geo
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -20,18 +20,7 @@ async def track_pageview(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_trusted_proxy(request)
     ip = get_client_ip(request)
-    recent_count = (
-        db.query(PageView)
-        .filter(
-            PageView.ip_address == ip,
-            PageView.created_at >= datetime.utcnow() - timedelta(minutes=1),
-        )
-        .count()
-    )
-    if recent_count >= 120:
-        raise HTTPException(status_code=429, detail="Too many page views")
     geo = await resolve_geo(request, ip)
 
     view = PageView(

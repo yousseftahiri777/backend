@@ -1,28 +1,31 @@
-import uuid
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, field_validator
+import uuid
 
 SAUDI_PHONE_RE = re.compile(r"^(\+9665|9665|05|5)\d{8}$")
 
 
 class OrderItemSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    productId: str = Field(min_length=1, max_length=64)
-    qty: int = Field(ge=1, le=10)
+    productId: str
+    nameAr: str
+    qty: int
+    price: float
 
 
 class CreateOrderSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    customerName: str = Field(min_length=2, max_length=120)
+    customerName: str
     phone: str
-    city: Optional[str] = Field(default=None, max_length=120)
-    items: List[OrderItemSchema] = Field(min_length=1, max_length=3)
-    eventId: str = Field(min_length=8, max_length=128)
+    city: Optional[str] = None
+    items: List[OrderItemSchema]
+    subtotal: float
+    total: float
+    shipping: float = 0.0
+    upsellAccepted: bool = False
+    upsellProduct: Optional[str] = None
+    eventId: str
+    source: str = "website"
 
     @field_validator("phone")
     @classmethod
@@ -45,33 +48,26 @@ class CreateOrderSchema(BaseModel):
     def validate_items(cls, v):
         if not v:
             raise ValueError("يجب أن يحتوي الطلب على منتج واحد على الأقل.")
-        product_ids = [item.productId for item in v]
-        if len(product_ids) != len(set(product_ids)):
-            raise ValueError("لا يمكن تكرار المنتج في أكثر من سطر.")
-        from app.product_catalog import PRODUCTS
-
-        if any(product_id not in PRODUCTS for product_id in product_ids):
-            raise ValueError("الطلب يحتوي على منتج غير صالح.")
         return v
 
 
 class UpsellUpdateSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    upsellProduct: str = Field(min_length=1, max_length=64)
+    upsellAccepted: bool = True
+    upsellProduct: str
+    upsellPrice: float
+    newTotal: float
+    nameAr: Optional[str] = None
 
 
 class ContactSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(min_length=2, max_length=120)
-    email: str = Field(min_length=3, max_length=254)
-    message: str = Field(min_length=1, max_length=4000)
+    name: str
+    email: str
+    message: str
 
 
-class PublicOrderResponse(BaseModel):
+class OrderResponse(BaseModel):
+    id: uuid.UUID
     orderId: str
-    orderToken: str
     customerName: str
     phone: str
     city: Optional[str] = None
@@ -81,14 +77,21 @@ class PublicOrderResponse(BaseModel):
     total: float
     upsellAccepted: bool
     upsellProduct: Optional[str]
+    ipAddress: str
+    countryCode: Optional[str]
+    isVpn: bool
     status: str
+    eventId: str
+    source: str
     createdAt: datetime
 
+    model_config = {"from_attributes": True}
+
     @classmethod
-    def from_orm_order(cls, order, token: str):
+    def from_orm_order(cls, order):
         return cls(
+            id=order.id,
             orderId=order.order_id,
-            orderToken=token,
             customerName=order.customer_name,
             phone=order.phone,
             city=getattr(order, "city", None),
@@ -98,37 +101,36 @@ class PublicOrderResponse(BaseModel):
             total=order.total,
             upsellAccepted=order.upsell_accepted,
             upsellProduct=order.upsell_product,
+            ipAddress=order.ip_address,
+            countryCode=order.country_code,
+            isVpn=order.is_vpn,
             status=order.status,
+            eventId=order.event_id,
+            source=order.source,
             createdAt=order.created_at,
         )
 
 
 class EventTrackSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    event_name: str = Field(min_length=1, max_length=64)
-    event_id: str = Field(min_length=8, max_length=128)
-    event_time: int = Field(gt=0)
-    user_data: Dict[str, Any] = Field(default_factory=dict)
-    custom_data: Dict[str, Any] = Field(default_factory=dict)
+    event_name: str
+    event_id: str
+    event_time: int
+    user_data: Dict[str, Any]
+    custom_data: Dict[str, Any]
 
 
 class PageViewSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    sessionId: str = Field(min_length=8, max_length=128)
-    path: str = Field(min_length=1, max_length=512)
-    referrer: Optional[str] = Field(default=None, max_length=512)
-    utmSource: Optional[str] = Field(default=None, max_length=128)
-    utmMedium: Optional[str] = Field(default=None, max_length=128)
-    utmCampaign: Optional[str] = Field(default=None, max_length=128)
+    sessionId: str
+    path: str
+    referrer: Optional[str] = None
+    utmSource: Optional[str] = None
+    utmMedium: Optional[str] = None
+    utmCampaign: Optional[str] = None
 
 
 class AdminLoginSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    username: str = Field(min_length=1, max_length=120)
-    password: str = Field(min_length=1, max_length=512)
+    username: str
+    password: str
 
 
 class AdminLoginResponse(BaseModel):
@@ -149,8 +151,6 @@ class AdminOrderListItem(BaseModel):
     countryCode: Optional[str]
     isVpn: bool
     itemCount: int
-    sheetSyncStatus: Optional[str] = None
-    sheetSyncError: Optional[str] = None
     createdAt: datetime
 
 
@@ -161,29 +161,9 @@ class AdminOrderListResponse(BaseModel):
     pageSize: int
 
 
-class AdminOrderDetailResponse(BaseModel):
-    id: uuid.UUID
-    orderId: str
-    customerName: str
-    phone: str
-    city: Optional[str] = None
-    items: List[Dict[str, Any]]
-    subtotal: float
-    shipping: float
-    total: float
-    upsellAccepted: bool
-    upsellProduct: Optional[str]
-    ipAddress: str
-    countryCode: Optional[str]
-    isVpn: bool
-    status: str
-    eventId: str
-    source: str
-    createdAt: datetime
+class AdminOrderDetailResponse(OrderResponse):
     updatedAt: datetime
     orderItems: List[Dict[str, Any]]
-    sheetSyncStatus: Optional[str] = None
-    sheetSyncError: Optional[str] = None
 
 
 class AdminStatusUpdateSchema(BaseModel):
