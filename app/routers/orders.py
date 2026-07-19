@@ -2,7 +2,7 @@ import uuid
 import logging
 import asyncio
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Order, OrderItem
@@ -31,6 +31,7 @@ def _geo_block_detail(geo: dict) -> str:
 async def create_order(
     payload: CreateOrderSchema,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     ip = get_client_ip(request)
@@ -122,19 +123,27 @@ async def create_order(
         "user_data": {
             "ph": order.phone,
             "client_ip_address": ip,
+            "client_user_agent": request.headers.get("user-agent", ""),
         },
         "custom_data": {
             "currency": "SAR",
             "value": order.total,
             "order_id": order.order_id,
             "contents": order.items,
+            "content_ids": [item.productId for item in payload.items],
         },
     }
 
-    asyncio.create_task(send_to_sheets(order_dict))
-    asyncio.create_task(send_fb_capi(event_data))
-    asyncio.create_task(send_tiktok_events(event_data))
-    asyncio.create_task(send_snap_capi(event_data))
+    # BackgroundTasks outlive the HTTP response; create_task often dies early.
+    background_tasks.add_task(send_to_sheets, order_dict)
+    background_tasks.add_task(send_fb_capi, event_data)
+    background_tasks.add_task(send_tiktok_events, event_data)
+    background_tasks.add_task(send_snap_capi, event_data)
+    logger.info(
+        "Queued TikTok CAPI Purchase order=%s event_id=%s",
+        order.order_id,
+        order.event_id,
+    )
 
     return OrderResponse.from_orm_order(order)
 

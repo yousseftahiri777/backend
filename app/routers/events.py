@@ -1,8 +1,9 @@
-import asyncio
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
+
 from app.database import get_db
 from app.models import TrackingEvent
 from app.schemas import EventTrackSchema
@@ -16,19 +17,29 @@ router = APIRouter()
 async def track_event(
     payload: EventTrackSchema,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     event_data = payload.model_dump()
+    ip = get_client_ip(request)
+    ua = request.headers.get("user-agent", "")
 
-    # Save to DB
+    # Enrich match keys for CAPI when the browser proxy omitted them
+    user_data = dict(event_data.get("user_data") or {})
+    if ip and not user_data.get("client_ip_address"):
+        user_data["client_ip_address"] = ip
+    if ua and not user_data.get("client_user_agent"):
+        user_data["client_user_agent"] = ua
+    event_data["user_data"] = user_data
+
     event = TrackingEvent(
         id=uuid.uuid4(),
         event_name=payload.event_name,
         event_id=payload.event_id,
         event_time=payload.event_time,
-        user_data=payload.user_data,
+        user_data=user_data,
         custom_data=payload.custom_data,
-        ip_address=get_client_ip(request),
+        ip_address=ip,
         created_at=datetime.utcnow(),
     )
     try:
@@ -37,9 +48,8 @@ async def track_event(
     except Exception:
         db.rollback()
 
-    # Fire pixels async
-    asyncio.create_task(send_fb_capi(event_data))
-    asyncio.create_task(send_tiktok_events(event_data))
-    asyncio.create_task(send_snap_capi(event_data))
+    background_tasks.add_task(send_fb_capi, event_data)
+    background_tasks.add_task(send_tiktok_events, event_data)
+    background_tasks.add_task(send_snap_capi, event_data)
 
     return {"accepted": True}
