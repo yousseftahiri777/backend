@@ -58,6 +58,12 @@ async def send_fb_capi(event_data: dict) -> None:
 
 async def send_tiktok_events(event_data: dict) -> None:
     if not settings.TIKTOK_ACCESS_TOKEN or not settings.TIKTOK_PIXEL_ID:
+        logger.warning(
+            "TikTok CAPI skipped: missing %s",
+            "TIKTOK_ACCESS_TOKEN"
+            if not settings.TIKTOK_ACCESS_TOKEN
+            else "TIKTOK_PIXEL_ID",
+        )
         return
 
     url = "https://business-api.tiktok.com/open_api/v1.3/event/track/"
