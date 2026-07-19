@@ -56,6 +56,14 @@ async def send_fb_capi(event_data: dict) -> None:
         logger.error("FB CAPI failed: %s", exc)
 
 
+def _tiktok_phone_hash(phone: str) -> str:
+    """Hash once if raw; leave as-is if already sha256 hex."""
+    cleaned = (phone or "").strip().lower()
+    if len(cleaned) == 64 and all(c in "0123456789abcdef" for c in cleaned):
+        return cleaned
+    return _sha256(cleaned)
+
+
 async def send_tiktok_events(event_data: dict) -> None:
     if not settings.TIKTOK_ACCESS_TOKEN or not settings.TIKTOK_PIXEL_ID:
         logger.warning(
@@ -69,47 +77,74 @@ async def send_tiktok_events(event_data: dict) -> None:
     url = "https://business-api.tiktok.com/open_api/v1.3/event/track/"
     user_data = event_data.get("user_data", {})
     custom_data = event_data.get("custom_data", {})
+    event_name = event_data.get("event_name", "Purchase")
+    event_time = int(event_data.get("event_time", int(time.time())))
 
-    properties = {}
+    properties: dict = {}
     if custom_data.get("currency"):
         properties["currency"] = custom_data["currency"]
     if custom_data.get("value") is not None:
-        properties["value"] = custom_data["value"]
+        properties["value"] = float(custom_data["value"])
     if custom_data.get("order_id"):
-        properties["order_id"] = custom_data["order_id"]
+        properties["order_id"] = str(custom_data["order_id"])
+    if custom_data.get("contents"):
+        properties["contents"] = custom_data["contents"]
+    if custom_data.get("content_ids"):
+        properties["content_ids"] = custom_data["content_ids"]
 
-    context = {
-        "ad": {},
-        "page": {"url": "https://lamabeauty.shop"},
-        "ip": user_data.get("client_ip_address", ""),
-        "user_agent": user_data.get("client_user_agent", ""),
-    }
-
-    contact = {}
+    user: dict = {}
     if user_data.get("ph"):
-        contact["phone_number"] = _sha256(user_data["ph"])
+        user["phone"] = _tiktok_phone_hash(str(user_data["ph"]))
     if user_data.get("em"):
-        contact["email"] = _sha256(user_data["em"])
+        em = str(user_data["em"]).strip().lower()
+        user["email"] = em if len(em) == 64 else _sha256(em)
+    if user_data.get("client_ip_address"):
+        user["ip"] = user_data["client_ip_address"]
+    if user_data.get("client_user_agent"):
+        user["user_agent"] = user_data["client_user_agent"]
 
-    payload = {
-        "pixel_code": settings.TIKTOK_PIXEL_ID,
-        "event": event_data.get("event_name", "Purchase"),
-        "event_id": event_data.get("event_id", ""),
-        "timestamp": str(event_data.get("event_time", int(time.time()))),
-        "context": context,
-        "properties": properties,
-        "type": "track",
+    payload: dict = {
+        "event_source": "web",
+        "event_source_id": settings.TIKTOK_PIXEL_ID,
+        "data": [
+            {
+                "event": event_name,
+                "event_time": event_time,
+                "event_id": event_data.get("event_id", ""),
+                "user": user,
+                "properties": properties,
+                "page": {"url": "https://lamabeauty.shop"},
+            }
+        ],
     }
-    if contact:
-        payload["context"]["user"] = contact
+    if settings.TIKTOK_TEST_EVENT_CODE:
+        payload["test_event_code"] = settings.TIKTOK_TEST_EVENT_CODE
 
-    headers = {"Access-Token": settings.TIKTOK_ACCESS_TOKEN}
+    headers = {
+        "Access-Token": settings.TIKTOK_ACCESS_TOKEN,
+        "Content-Type": "application/json",
+    }
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            logger.info("TikTok event sent: %s", event_data.get("event_name"))
+            body = {}
+            try:
+                body = response.json()
+            except Exception:
+                body = {"raw": response.text[:500]}
+            if response.status_code >= 400 or body.get("code", 0) != 0:
+                logger.error(
+                    "TikTok Events API failed: status=%s body=%s",
+                    response.status_code,
+                    body,
+                )
+                return
+            logger.info(
+                "TikTok event sent: %s event_id=%s",
+                event_name,
+                event_data.get("event_id", ""),
+            )
     except Exception as exc:
         logger.error("TikTok Events API failed: %s", exc)
 

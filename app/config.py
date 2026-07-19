@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     FB_PIXEL_ID: str = ""
     TIKTOK_ACCESS_TOKEN: str = ""
     TIKTOK_PIXEL_ID: str = ""
+    # From Events Manager → Test events (shows Server events in the test panel)
+    TIKTOK_TEST_EVENT_CODE: str = ""
     SNAP_ACCESS_TOKEN: str = ""
     SNAP_PIXEL_ID: str = ""
     # Comma-separated origins, e.g. "https://lamabeauty.shop,http://localhost:3000"
