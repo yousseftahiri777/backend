@@ -61,6 +61,12 @@ def _tiktok_contents(custom_data: dict) -> list[dict]:
 
 async def send_fb_capi(event_data: dict) -> None:
     if not settings.FB_ACCESS_TOKEN or not settings.FB_PIXEL_ID:
+        logger.warning(
+            "FB CAPI skipped: missing %s",
+            "FB_ACCESS_TOKEN"
+            if not settings.FB_ACCESS_TOKEN
+            else "FB_PIXEL_ID",
+        )
         return
 
     url = f"https://graph.facebook.com/v21.0/{settings.FB_PIXEL_ID}/events"
