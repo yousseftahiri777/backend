@@ -102,12 +102,26 @@ async def send_fb_capi(event_data: dict) -> None:
         ],
         "access_token": settings.FB_ACCESS_TOKEN,
     }
+    # Only present when explicitly testing — makes Server events show in the
+    # Events Manager "Test events" panel. Must be blank in production.
+    if settings.FB_TEST_EVENT_CODE:
+        payload["test_event_code"] = settings.FB_TEST_EVENT_CODE
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url, json=payload)
-            response.raise_for_status()
-            logger.info("FB CAPI event sent: %s", event_data.get("event_name"))
+            if response.status_code >= 400:
+                logger.error(
+                    "FB CAPI failed: status=%s body=%s",
+                    response.status_code,
+                    (response.text or "")[:500],
+                )
+                return
+            logger.info(
+                "FB CAPI event sent: %s event_id=%s",
+                event_data.get("event_name"),
+                event_data.get("event_id", ""),
+            )
     except Exception as exc:
         logger.error("FB CAPI failed: %s", exc)
 

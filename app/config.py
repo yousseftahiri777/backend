@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     GOOGLE_SHEETS_WEBHOOK_URL: str = ""
     FB_ACCESS_TOKEN: str = ""
     FB_PIXEL_ID: str = ""
+    # From Events Manager → Test events (shows Server/CAPI events in the test panel).
+    # Leave EMPTY in production — a test code routes events to the test bucket only.
+    FB_TEST_EVENT_CODE: str = ""
     TIKTOK_ACCESS_TOKEN: str = ""
     TIKTOK_PIXEL_ID: str = ""
     # From Events Manager → Test events (shows Server events in the test panel)
