@@ -184,6 +184,17 @@ async def _post_tiktok(url: str, payload: dict, label: str) -> bool:
         return False
 
 
+def _map_tiktok_event(event_name: str) -> str:
+    """Meta-style names → TikTok standard events (COD store uses PlaceAnOrder)."""
+    mapping = {
+        "Purchase": "PlaceAnOrder",
+        "InitiateCheckout": "InitiateCheckout",
+        "AddToCart": "AddToCart",
+        "ViewContent": "ViewContent",
+    }
+    return mapping.get(event_name, event_name)
+
+
 async def send_tiktok_events(event_data: dict) -> None:
     """Send web event to TikTok Events API (server). Never raise — logs only."""
     if not settings.TIKTOK_ACCESS_TOKEN or not settings.TIKTOK_PIXEL_ID:
@@ -195,7 +206,7 @@ async def send_tiktok_events(event_data: dict) -> None:
         )
         return
 
-    event_name = event_data.get("event_name", "Purchase")
+    event_name = _map_tiktok_event(event_data.get("event_name", "Purchase"))
     event_id = str(event_data.get("event_id") or "")
     event_time = int(event_data.get("event_time", int(time.time())))
     user_data = event_data.get("user_data") or {}
