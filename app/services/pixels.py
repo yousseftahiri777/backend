@@ -21,16 +21,16 @@ def _is_sha256_hex(value: str) -> bool:
 
 
 def _tiktok_phone_hash(phone: str) -> str:
-    """Hash E.164 (+9665…) once; leave already-hashed values alone."""
+    """Hash E.164 (+9665…) per TikTok Events API — lowercase SHA256 of +country+digits."""
     cleaned = (phone or "").strip()
     if _is_sha256_hex(cleaned):
         return cleaned.lower()
     if cleaned.startswith("+"):
-        e164 = cleaned
+        e164 = cleaned.replace(" ", "").replace("-", "")
     else:
         digits = format_ksa_phone_international(cleaned)
         e164 = f"+{digits}" if digits else cleaned
-    return _sha256(e164)
+    return _sha256(e164.lower())
 
 
 def _tiktok_contents(custom_data: dict) -> list[dict]:
@@ -128,7 +128,10 @@ async def send_fb_capi(event_data: dict) -> None:
 
 def _build_tiktok_user(user_data: dict) -> dict:
     user: dict = {}
-    if user_data.get("ph"):
+    raw_phone = user_data.get("phone_e164") or user_data.get("phone")
+    if raw_phone:
+        user["phone"] = _tiktok_phone_hash(str(raw_phone))
+    elif user_data.get("ph"):
         user["phone"] = _tiktok_phone_hash(str(user_data["ph"]))
     if user_data.get("em"):
         em = str(user_data["em"]).strip().lower()
@@ -144,6 +147,7 @@ def _build_tiktok_user(user_data: dict) -> dict:
         user["ip"] = user_data["client_ip_address"]
     if user_data.get("client_user_agent"):
         user["user_agent"] = user_data["client_user_agent"]
+    user.setdefault("locale", "ar_SA")
     return user
 
 
@@ -165,11 +169,12 @@ def _build_tiktok_properties(custom_data: dict) -> dict:
     if contents:
         properties["contents"] = contents
         properties.setdefault("content_type", "product")
-    content_ids = custom_data.get("content_ids")
-    if isinstance(content_ids, list) and content_ids:
-        properties["content_ids"] = [str(x) for x in content_ids]
-    elif contents:
-        properties["content_ids"] = [c["content_id"] for c in contents]
+    elif isinstance(custom_data.get("content_ids"), list) and custom_data["content_ids"]:
+        properties["contents"] = [
+            {"content_id": str(cid), "content_type": "product"}
+            for cid in custom_data["content_ids"]
+        ]
+        properties.setdefault("content_type", "product")
     return properties
 
 
@@ -221,6 +226,10 @@ async def send_tiktok_events(event_data: dict) -> None:
 
     event_name = _map_tiktok_event(event_data.get("event_name", "Purchase"))
     event_id = str(event_data.get("event_id") or "")
+    if not event_id:
+        logger.warning("TikTok CAPI skipped: missing event_id for %s", event_name)
+        return
+
     event_time = int(event_data.get("event_time", int(time.time())))
     user_data = event_data.get("user_data") or {}
     custom_data = event_data.get("custom_data") or {}
@@ -228,10 +237,17 @@ async def send_tiktok_events(event_data: dict) -> None:
     properties = _build_tiktok_properties(custom_data)
     page_url = event_data.get("page_url") or "https://lamabeauty.shop"
 
-    # Events API 2.0 (what Events Manager Test events expects for Server)
+    if not user.get("ip") and not user.get("phone") and not user.get("ttp"):
+        logger.warning(
+            "TikTok CAPI weak match keys for %s id=%s (no ip/phone/ttp)",
+            event_name,
+            event_id,
+        )
+
+    # Events API 2.0
     v2_payload: dict = {
         "event_source": "web",
-        "event_source_id": settings.TIKTOK_PIXEL_ID,
+        "event_source_id": settings.TIKTOK_PIXEL_ID.strip(),
         "data": [
             {
                 "event": event_name,
@@ -243,8 +259,9 @@ async def send_tiktok_events(event_data: dict) -> None:
             }
         ],
     }
-    if settings.TIKTOK_TEST_EVENT_CODE:
-        v2_payload["test_event_code"] = settings.TIKTOK_TEST_EVENT_CODE
+    test_code = (settings.TIKTOK_TEST_EVENT_CODE or "").strip()
+    if test_code:
+        v2_payload["test_event_code"] = test_code
 
     try:
         ok = await _post_tiktok(
@@ -253,7 +270,7 @@ async def send_tiktok_events(event_data: dict) -> None:
             f"event/track {event_name} id={event_id}",
         )
         if ok:
-            logger.info("TikTok event sent: %s event_id=%s", event_name, event_id)
+            logger.info("TikTok CAPI sent: %s event_id=%s", event_name, event_id)
             return
     except Exception as exc:
         logger.error("TikTok event/track exception: %s", exc)
@@ -276,7 +293,7 @@ async def send_tiktok_events(event_data: dict) -> None:
         "properties": properties,
     }
     if settings.TIKTOK_TEST_EVENT_CODE:
-        classic_payload["test_event_code"] = settings.TIKTOK_TEST_EVENT_CODE
+        classic_payload["test_event_code"] = settings.TIKTOK_TEST_EVENT_CODE.strip()
 
     try:
         ok = await _post_tiktok(

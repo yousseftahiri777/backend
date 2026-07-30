@@ -11,7 +11,7 @@ from app.config import settings
 from app.phone_utils import is_whitelisted_test_phone, normalize_ksa_phone_local
 from app.services.geo import get_client_ip, resolve_geo
 from app.services.google_sheets import send_to_sheets
-from app.services.pixels import send_fb_capi, send_tiktok_events, send_snap_capi
+from app.services.pixel_tasks import schedule_pixel_events
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -122,7 +122,7 @@ async def create_order(
         "event_time": int(order.created_at.timestamp()),
         "page_url": str(request.headers.get("referer") or "https://lamabeauty.shop"),
         "user_data": {
-            "ph": order.phone,
+            "phone_e164": payload.phone,
             "client_ip_address": ip,
             "client_user_agent": request.headers.get("user-agent", ""),
             "external_id": order.order_id,
@@ -138,13 +138,11 @@ async def create_order(
         },
     }
 
-    # BackgroundTasks outlive the HTTP response; create_task often dies early.
+    # Reliable async CAPI (BackgroundTasks can drop async httpx calls).
     background_tasks.add_task(send_to_sheets, order_dict)
-    background_tasks.add_task(send_fb_capi, event_data)
-    background_tasks.add_task(send_tiktok_events, event_data)
-    background_tasks.add_task(send_snap_capi, event_data)
+    schedule_pixel_events(event_data)
     logger.info(
-        "Queued TikTok CAPI Purchase order=%s event_id=%s",
+        "Scheduled TikTok CAPI PlaceAnOrder order=%s event_id=%s",
         order.order_id,
         order.event_id,
     )

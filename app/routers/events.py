@@ -1,14 +1,14 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import TrackingEvent
 from app.schemas import EventTrackSchema
 from app.services.geo import get_client_ip
-from app.services.pixels import send_fb_capi, send_tiktok_events, send_snap_capi
+from app.services.pixel_tasks import schedule_pixel_events
 
 router = APIRouter()
 
@@ -17,7 +17,6 @@ router = APIRouter()
 async def track_event(
     payload: EventTrackSchema,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     event_data = payload.model_dump()
@@ -50,8 +49,6 @@ async def track_event(
     except Exception:
         db.rollback()
 
-    background_tasks.add_task(send_fb_capi, event_data)
-    background_tasks.add_task(send_tiktok_events, event_data)
-    background_tasks.add_task(send_snap_capi, event_data)
+    schedule_pixel_events(event_data)
 
     return {"accepted": True}
