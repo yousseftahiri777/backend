@@ -58,22 +58,55 @@ async def health_check():
     return {"status": "healthy"}
 
 
+def _pixel_production_status(pixel_id: str, access_token: str, test_code: str) -> dict:
+    test_set = bool((test_code or "").strip())
+    return {
+        "pixel_id": pixel_id or None,
+        "access_token_set": bool((access_token or "").strip()),
+        "test_event_code_set": test_set,
+        "production_mode": not test_set,
+    }
+
+
 @app.get("/api/v1/tiktok/status")
 async def tiktok_integration_status():
     """Debug TikTok CAPI config without exposing secrets."""
     pixel = (settings.TIKTOK_PIXEL_ID or "").strip()
     token = (settings.TIKTOK_ACCESS_TOKEN or "").strip()
     test_code = (settings.TIKTOK_TEST_EVENT_CODE or "").strip()
+    status = _pixel_production_status(pixel, token, test_code)
     return {
-        "pixel_id": pixel or None,
+        **status,
         "pixel_id_ok": pixel == "D9L7CFJC77U3ACU27SV0",
-        "access_token_set": bool(token),
-        "test_event_code_set": bool(test_code),
-        "production_mode": not bool(test_code),
         "ready_hint": (
             "OK for production"
-            if pixel and token and not test_code
+            if pixel and token and status["production_mode"]
             else "Set TIKTOK_PIXEL_ID + TIKTOK_ACCESS_TOKEN and clear TIKTOK_TEST_EVENT_CODE"
+        ),
+    }
+
+
+@app.get("/api/v1/pixels/status")
+async def pixels_integration_status():
+    """Debug FB + TikTok CAPI — confirm test_event_code is cleared in production."""
+    fb = _pixel_production_status(
+        (settings.FB_PIXEL_ID or "").strip(),
+        (settings.FB_ACCESS_TOKEN or "").strip(),
+        (settings.FB_TEST_EVENT_CODE or "").strip(),
+    )
+    tt = _pixel_production_status(
+        (settings.TIKTOK_PIXEL_ID or "").strip(),
+        (settings.TIKTOK_ACCESS_TOKEN or "").strip(),
+        (settings.TIKTOK_TEST_EVENT_CODE or "").strip(),
+    )
+    return {
+        "facebook": fb,
+        "tiktok": {**tt, "pixel_id_ok": tt["pixel_id"] == "D9L7CFJC77U3ACU27SV0"},
+        "production_ready": fb["production_mode"] and tt["production_mode"],
+        "action": (
+            "OK — launch campaigns"
+            if fb["production_mode"] and tt["production_mode"]
+            else "Clear FB_TEST_EVENT_CODE and TIKTOK_TEST_EVENT_CODE in Easypanel backend env, then restart"
         ),
     }
 
