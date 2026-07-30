@@ -58,6 +58,26 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/api/v1/tiktok/status")
+async def tiktok_integration_status():
+    """Debug TikTok CAPI config without exposing secrets."""
+    pixel = (settings.TIKTOK_PIXEL_ID or "").strip()
+    token = (settings.TIKTOK_ACCESS_TOKEN or "").strip()
+    test_code = (settings.TIKTOK_TEST_EVENT_CODE or "").strip()
+    return {
+        "pixel_id": pixel or None,
+        "pixel_id_ok": pixel == "D9L7CFJC77U3ACU27SV0",
+        "access_token_set": bool(token),
+        "test_event_code_set": bool(test_code),
+        "production_mode": not bool(test_code),
+        "ready_hint": (
+            "OK for production"
+            if pixel and token and not test_code
+            else "Set TIKTOK_PIXEL_ID + TIKTOK_ACCESS_TOKEN and clear TIKTOK_TEST_EVENT_CODE"
+        ),
+    }
+
+
 @app.get("/")
 async def root():
     return {"service": "LAMÁ API", "status": "running"}
