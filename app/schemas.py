@@ -26,6 +26,8 @@ class CreateOrderSchema(BaseModel):
     upsellProduct: Optional[str] = None
     eventId: str
     source: str = "website"
+    tiktokTtp: Optional[str] = None
+    tiktokClickId: Optional[str] = None
 
     @field_validator("phone")
     @classmethod
@@ -117,6 +119,7 @@ class EventTrackSchema(BaseModel):
     event_time: int
     user_data: Dict[str, Any]
     custom_data: Dict[str, Any]
+    page_url: Optional[str] = None
 
 
 class PageViewSchema(BaseModel):

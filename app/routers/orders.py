@@ -120,10 +120,14 @@ async def create_order(
         "event_name": "Purchase",
         "event_id": order.event_id,
         "event_time": int(order.created_at.timestamp()),
+        "page_url": str(request.headers.get("referer") or "https://lamabeauty.shop"),
         "user_data": {
             "ph": order.phone,
             "client_ip_address": ip,
             "client_user_agent": request.headers.get("user-agent", ""),
+            "external_id": order.order_id,
+            **({"ttp": payload.tiktokTtp} if payload.tiktokTtp else {}),
+            **({"ttclid": payload.tiktokClickId} if payload.tiktokClickId else {}),
         },
         "custom_data": {
             "currency": "SAR",

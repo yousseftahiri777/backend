@@ -133,6 +133,13 @@ def _build_tiktok_user(user_data: dict) -> dict:
     if user_data.get("em"):
         em = str(user_data["em"]).strip().lower()
         user["email"] = em if _is_sha256_hex(em) else _sha256(em)
+    if user_data.get("external_id"):
+        ext = str(user_data["external_id"])
+        user["external_id"] = ext.lower() if _is_sha256_hex(ext) else _sha256(ext)
+    if user_data.get("ttp"):
+        user["ttp"] = str(user_data["ttp"])
+    if user_data.get("ttclid"):
+        user["ttclid"] = str(user_data["ttclid"])
     if user_data.get("client_ip_address"):
         user["ip"] = user_data["client_ip_address"]
     if user_data.get("client_user_agent"):
@@ -148,10 +155,16 @@ def _build_tiktok_properties(custom_data: dict) -> dict:
         properties["value"] = float(custom_data["value"])
     if custom_data.get("order_id"):
         properties["order_id"] = str(custom_data["order_id"])
+    if custom_data.get("content_id"):
+        properties["content_id"] = str(custom_data["content_id"])
+    if custom_data.get("content_name"):
+        properties["content_name"] = str(custom_data["content_name"])
+    if custom_data.get("content_type"):
+        properties["content_type"] = str(custom_data["content_type"])
     contents = _tiktok_contents(custom_data)
     if contents:
         properties["contents"] = contents
-        properties["content_type"] = "product"
+        properties.setdefault("content_type", "product")
     content_ids = custom_data.get("content_ids")
     if isinstance(content_ids, list) and content_ids:
         properties["content_ids"] = [str(x) for x in content_ids]
@@ -213,7 +226,7 @@ async def send_tiktok_events(event_data: dict) -> None:
     custom_data = event_data.get("custom_data") or {}
     user = _build_tiktok_user(user_data)
     properties = _build_tiktok_properties(custom_data)
-    page_url = "https://lamabeauty.shop"
+    page_url = event_data.get("page_url") or "https://lamabeauty.shop"
 
     # Events API 2.0 (what Events Manager Test events expects for Server)
     v2_payload: dict = {

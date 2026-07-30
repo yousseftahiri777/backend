@@ -31,6 +31,8 @@ async def track_event(
     if ua and not user_data.get("client_user_agent"):
         user_data["client_user_agent"] = ua
     event_data["user_data"] = user_data
+    if payload.page_url:
+        event_data["page_url"] = payload.page_url
 
     event = TrackingEvent(
         id=uuid.uuid4(),
