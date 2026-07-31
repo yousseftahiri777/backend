@@ -11,7 +11,7 @@ from sqlalchemy import or_
 
 from app.config import settings
 from app.database import get_db
-from app.models import Order, OrderItem
+from app.models import Order, OrderItem, PageView
 from app.schemas import (
     AdminLoginSchema,
     AdminLoginResponse,
@@ -19,6 +19,8 @@ from app.schemas import (
     AdminOrderListItem,
     AdminOrderListResponse,
     AdminStatusUpdateSchema,
+    AdminVisitorListItem,
+    AdminVisitorListResponse,
     OrderResponse,
 )
 from app.services.admin_analytics import get_metrics
@@ -257,3 +259,51 @@ async def admin_update_order_status(
     db.refresh(order)
     logger.info("Order %s status updated to %s by admin", order_id, payload.status)
     return OrderResponse.from_orm_order(order)
+
+
+@router.get("/visitors", response_model=AdminVisitorListResponse)
+async def admin_list_visitors(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=100, alias="pageSize"),
+    valid_only: bool = Query(False, alias="validOnly"),
+    start: Optional[date] = Query(None),
+    end: Optional[date] = Query(None),
+    _admin: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    q = db.query(PageView)
+    if valid_only:
+        q = q.filter(PageView.is_valid.is_(True))
+    if start:
+        q = q.filter(PageView.created_at >= datetime.combine(start, datetime.min.time()))
+    if end:
+        q = q.filter(PageView.created_at < datetime.combine(end, datetime.max.time()))
+
+    total = q.count()
+    rows = (
+        q.order_by(PageView.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return AdminVisitorListResponse(
+        visitors=[
+            AdminVisitorListItem(
+                id=row.id,
+                sessionId=row.session_id[:8] + "…",
+                path=row.path,
+                referrer=row.referrer,
+                utmSource=row.utm_source,
+                countryCode=row.country_code,
+                city=row.city,
+                isVpn=row.is_vpn,
+                isValid=row.is_valid,
+                createdAt=row.created_at,
+            )
+            for row in rows
+        ],
+        total=total,
+        page=page,
+        pageSize=page_size,
+    )

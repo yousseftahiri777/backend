@@ -169,6 +169,26 @@ class AdminOrderDetailResponse(OrderResponse):
     orderItems: List[Dict[str, Any]]
 
 
+class AdminVisitorListItem(BaseModel):
+    id: uuid.UUID
+    sessionId: str
+    path: str
+    referrer: Optional[str] = None
+    utmSource: Optional[str] = None
+    countryCode: Optional[str] = None
+    city: Optional[str] = None
+    isVpn: bool
+    isValid: bool
+    createdAt: datetime
+
+
+class AdminVisitorListResponse(BaseModel):
+    visitors: List[AdminVisitorListItem]
+    total: int
+    page: int
+    pageSize: int
+
+
 class AdminStatusUpdateSchema(BaseModel):
     status: str
 
