@@ -10,9 +10,13 @@ def test_format_ksa_phone_international():
 
 
 def test_product_skus():
+    from app.product_catalog import get_cod_network_sku, get_export_product_name
+
     assert get_product_sku("sweat-shield") == "LAMA-SWEAT-01"
     assert get_product_sku("nasma-spray") == "LAMA-NASMA-01"
     assert get_product_sku("safaa-patches") == "LAMA-SAFAA-01"
+    assert get_cod_network_sku("sweat-shield") == "MP-YU0SFE1SC0RH"
+    assert "50 pair" in get_export_product_name("sweat-shield")
 
 
 def test_build_sheets_payload_multi_item():

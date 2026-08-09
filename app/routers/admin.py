@@ -12,6 +12,12 @@ from sqlalchemy import or_
 from app.config import settings
 from app.database import get_db
 from app.models import Order, OrderItem, PageView
+from app.phone_utils import format_ksa_phone_international
+from app.product_catalog import (
+    get_cod_network_sku,
+    get_export_product_name,
+    get_product_url,
+)
 from app.schemas import (
     AdminLoginSchema,
     AdminLoginResponse,
@@ -165,42 +171,63 @@ async def admin_export_orders(
     output = io.StringIO()
     output.write("\ufeff")
     writer = csv.writer(output)
+    # COD / fulfillment network template columns (exact headers)
     writer.writerow(
         [
-            "DATE",
-            "ORDER ID",
-            "COUNTRY",
-            "NAME",
-            "PHONE",
-            "CITY",
-            "PRODUCT",
-            "QUANTITY",
-            "TOTAL PRICE",
-            "CURRENCY",
-            "STATUS",
+            "OrderDate",
+            "country",
+            "name",
+            "phone",
+            "address",
+            "url",
+            "sku",
+            "Product",
+            "quantity",
+            "price",
+            "currency",
         ]
     )
     for order in q.order_by(Order.created_at.desc()).all():
         order_items = order.items or []
-        products = " / ".join(
-            str(item.get("nameAr") or item.get("productId") or "") for item in order_items
-        )
-        quantities = " / ".join(str(item.get("qty", 1)) for item in order_items)
-        writer.writerow(
-            [
-                order.created_at.strftime("%d/%m/%Y %H:%M"),
-                order.order_id,
-                order.country_code or "SA",
-                _csv_safe(order.customer_name),
-                _csv_safe(order.phone),
-                _csv_safe(order.city or ""),
-                _csv_safe(products),
-                quantities,
-                order.total,
-                "SAR",
-                order.status,
-            ]
-        )
+        if not order_items:
+            continue
+
+        phone = format_ksa_phone_international(order.phone or "")
+        # Force Excel to treat phone as text (avoid 9.66505E+11)
+        phone_cell = f'="{phone}"' if phone else ""
+
+        # One row per line item (network import expects product-level rows)
+        for idx, item in enumerate(order_items):
+            product_id = str(item.get("productId") or "")
+            qty = int(item.get("qty") or 1)
+            # Single-line orders: collect full COD total (incl. shipping). Multi: line total.
+            if len(order_items) == 1:
+                line_price = order.total
+            else:
+                unit = float(item.get("price") or 0)
+                line_price = round(unit * qty, 2)
+                if idx == 0 and order.shipping:
+                    line_price = round(line_price + float(order.shipping or 0), 2)
+
+            writer.writerow(
+                [
+                    order.created_at.strftime("%d/%m/%Y"),
+                    "SAUDIA",
+                    _csv_safe(order.customer_name),
+                    phone_cell,
+                    _csv_safe(order.city or ""),
+                    get_product_url(product_id),
+                    get_cod_network_sku(product_id),
+                    _csv_safe(
+                        get_export_product_name(
+                            product_id, str(item.get("nameAr") or product_id)
+                        )
+                    ),
+                    qty,
+                    line_price,
+                    "SAR",
+                ]
+            )
 
     filename = f"lama-orders-{date.today().isoformat()}.csv"
     return StreamingResponse(
