@@ -1,5 +1,3 @@
-import csv
-import io
 import logging
 from datetime import datetime, date
 from typing import Optional
@@ -12,12 +10,6 @@ from sqlalchemy import or_
 from app.config import settings
 from app.database import get_db
 from app.models import Order, OrderItem, PageView
-from app.phone_utils import format_ksa_phone_international
-from app.product_catalog import (
-    get_cod_network_sku,
-    get_export_product_name,
-    get_product_url,
-)
 from app.schemas import (
     AdminLoginSchema,
     AdminLoginResponse,
@@ -31,6 +23,7 @@ from app.schemas import (
 )
 from app.services.admin_analytics import get_metrics
 from app.services.admin_auth import create_admin_token, require_admin, verify_admin_credentials
+from app.services.cod_network_export import build_cod_network_workbook
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -39,12 +32,6 @@ VALID_ORDER_FILTER = (
     (Order.country_code == "SA")
     & (Order.is_vpn.is_(False))
 )
-
-
-def _csv_safe(value: object) -> object:
-    if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
-        return f"'{value}"
-    return value
 
 
 @router.post("/login", response_model=AdminLoginResponse)
@@ -168,71 +155,17 @@ async def admin_export_orders(
             )
         )
 
-    output = io.StringIO()
-    output.write("\ufeff")
-    writer = csv.writer(output)
-    # COD / fulfillment network template columns (exact headers)
-    writer.writerow(
-        [
-            "OrderDate",
-            "country",
-            "name",
-            "phone",
-            "address",
-            "url",
-            "sku",
-            "Product",
-            "quantity",
-            "price",
-            "currency",
-        ]
-    )
-    for order in q.order_by(Order.created_at.desc()).all():
-        order_items = order.items or []
-        if not order_items:
-            continue
+    orders = q.order_by(Order.created_at.desc()).all()
+    try:
+        workbook = build_cod_network_workbook(orders)
+    except FileNotFoundError as exc:
+        logger.exception("COD network template missing")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        phone = format_ksa_phone_international(order.phone or "")
-        # Force Excel to treat phone as text (avoid 9.66505E+11)
-        phone_cell = f'="{phone}"' if phone else ""
-
-        # One row per line item (network import expects product-level rows)
-        for idx, item in enumerate(order_items):
-            product_id = str(item.get("productId") or "")
-            qty = int(item.get("qty") or 1)
-            # Single-line orders: collect full COD total (incl. shipping). Multi: line total.
-            if len(order_items) == 1:
-                line_price = order.total
-            else:
-                unit = float(item.get("price") or 0)
-                line_price = round(unit * qty, 2)
-                if idx == 0 and order.shipping:
-                    line_price = round(line_price + float(order.shipping or 0), 2)
-
-            writer.writerow(
-                [
-                    order.created_at.strftime("%d/%m/%Y"),
-                    "SAUDIA",
-                    _csv_safe(order.customer_name),
-                    phone_cell,
-                    _csv_safe(order.city or ""),
-                    get_product_url(product_id),
-                    get_cod_network_sku(product_id),
-                    _csv_safe(
-                        get_export_product_name(
-                            product_id, str(item.get("nameAr") or product_id)
-                        )
-                    ),
-                    qty,
-                    line_price,
-                    "SAR",
-                ]
-            )
-
-    filename = f"lama-orders-{date.today().isoformat()}.csv"
+    filename = f"lama-orders-{date.today().isoformat()}.xlsx"
     return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv; charset=utf-8",
+        workbook,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
