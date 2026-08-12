@@ -4,6 +4,7 @@ PRODUCT_SKUS: dict[str, str] = {
     "sweat-shield": "LAMA-SWEAT-01",
     "nasma-spray": "LAMA-NASMA-01",
     "safaa-patches": "LAMA-SAFAA-01",
+    "stain-hero": "LAMA-STAIN-01",
 }
 
 # COD / fulfillment network SKUs (platform product codes — override per product if needed)
@@ -11,18 +12,21 @@ COD_NETWORK_SKUS: dict[str, str] = {
     "sweat-shield": "MP-YU0SFE1SC0RH",
     "nasma-spray": "LAMA-NASMA-01",
     "safaa-patches": "LAMA-SAFAA-01",
+    "stain-hero": "LAMA-STAIN-01",
 }
 
 PRODUCT_EXPORT_NAMES_EN: dict[str, str] = {
     "sweat-shield": "Armpit sweat absorbing pads ( 50 pair )",
     "nasma-spray": "Nasma shoe freshness spray 120ml",
     "safaa-patches": "Safaa acne patches 180 pcs",
+    "stain-hero": "Instant stain remover spray 120ml",
 }
 
 PRODUCT_URLS: dict[str, str] = {
     "sweat-shield": "https://lamabeauty.shop/products/sweat-shield",
     "nasma-spray": "https://lamabeauty.shop/products/nasma-spray",
     "safaa-patches": "https://lamabeauty.shop/products/safaa-patches",
+    "stain-hero": "https://lamabeauty.shop/lp/stain-hero",
 }
 
 
